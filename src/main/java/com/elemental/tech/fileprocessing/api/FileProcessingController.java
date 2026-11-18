@@ -26,8 +26,6 @@ public class FileProcessingController {
             );
         }
 
-        // Actual file processing would go here.
-        // This endpoint only demonstrates the request flow.
 
         return ResponseEntity.ok(Map.of(
                 "message", "File accepted",
