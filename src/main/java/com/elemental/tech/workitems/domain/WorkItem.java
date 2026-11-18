@@ -1,6 +1,7 @@
 package com.elemental.tech.workitems.domain;
 
 import java.time.Instant;
+import java.util.Objects;
 
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
@@ -11,10 +12,12 @@ import jakarta.persistence.GenerationType;
 import jakarta.persistence.Id;
 import jakarta.persistence.Table;
 import jakarta.persistence.Version;
+import lombok.AccessLevel;
+import lombok.Getter;
+import lombok.NoArgsConstructor;
 
-/*
-    TODO: Refactor this, use a library that will simplify this if we can?.
- */
+@Getter
+@NoArgsConstructor(access = AccessLevel.PROTECTED)
 @Entity
 @Table(name = "work_item")
 public class WorkItem {
@@ -46,8 +49,6 @@ public class WorkItem {
     @Column(nullable = false)
     private Instant updatedAt;
 
-    protected WorkItem() {
-    }
 
     public WorkItem(String title, String description, Priority priority) {
         this.title = title;
@@ -69,45 +70,35 @@ public class WorkItem {
     }
 
     public void transitionTo(Status newStatus) {
-        // TODO: enforce transitions (OPEN -> IN_PROGRESS -> DONE, etc.) and decide what to do on invalid transitions...
+        Objects.requireNonNull(newStatus, "Status cannot be null");
+
+        if (this.status == newStatus) {
+            return;
+        }
+
+        boolean allowed = switch (this.status) {
+            case OPEN -> newStatus == Status.IN_PROGRESS ||
+                    newStatus == Status.CANCELLED;
+
+            case IN_PROGRESS -> newStatus == Status.DONE ||
+                    newStatus == Status.CANCELLED;
+
+            case DONE, CANCELLED -> false;
+        };
+
+        if (!allowed) {
+            throw new IllegalStateException(
+                    "Invalid transition from " +
+                            this.status + " to " + newStatus
+            );
+        }
+
         this.status = newStatus;
         touch();
     }
 
     private void touch() {
         this.updatedAt = Instant.now();
-    }
-
-    public Long getId() {
-        return id;
-    }
-
-    public Long getVersion() {
-        return version;
-    }
-
-    public String getTitle() {
-        return title;
-    }
-
-    public String getDescription() {
-        return description;
-    }
-
-    public Status getStatus() {
-        return status;
-    }
-
-    public Priority getPriority() {
-        return priority;
-    }
-
-    public Instant getCreatedAt() {
-        return createdAt;
-    }
-
-    public Instant getUpdatedAt() {
-        return updatedAt;
     }
 
     public enum Status {

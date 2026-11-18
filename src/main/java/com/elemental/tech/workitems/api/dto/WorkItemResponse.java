@@ -4,6 +4,7 @@ import java.time.Instant;
 
 public record WorkItemResponse(
         long id,
+        Long version,
         String title,
         String description,
         String status,

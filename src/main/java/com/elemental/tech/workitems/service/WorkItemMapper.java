@@ -11,6 +11,7 @@ final class WorkItemMapper {
     static WorkItemResponse toResponse(WorkItem workItem) {
         return new WorkItemResponse(
                 workItem.getId(),
+                workItem.getVersion(),
                 workItem.getTitle(),
                 workItem.getDescription(),
                 workItem.getStatus().name(),
