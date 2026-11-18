@@ -21,6 +21,10 @@ spring:
     web:
       pageable:
         max-page-size: 100
+  http:
+    client:
+      connect-timeout: 2s
+      read-timeout: 3s
 
 ip-api:
   base-url: http://ip-api.com
@@ -34,6 +38,20 @@ ip-validation:
     - AWS
     - GCP
     - Azure
+
+resilience4j:
+  retry:
+    instances:
+      ipApi:
+        max-attempts: 3
+        wait-duration: 200ms
+        enable-exponential-backoff: true
+        exponential-backoff-multiplier: 2
+        retry-exceptions:
+          - org.springframework.web.client.ResourceAccessException
+          - org.springframework.web.client.HttpServerErrorException
+        ignore-exceptions:
+          - org.springframework.web.client.HttpClientErrorException
 
 logging:
   level:

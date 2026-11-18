@@ -4,11 +4,13 @@ import com.elemental.tech.fileprocessing.domain.RequestAudit;
 import com.elemental.tech.fileprocessing.persistence.RequestAuditRepository;
 import com.github.tomakehurst.wiremock.WireMockServer;
 
+import static com.github.tomakehurst.wiremock.client.WireMock.aResponse;
 import static com.github.tomakehurst.wiremock.client.WireMock.get;
 import static com.github.tomakehurst.wiremock.client.WireMock.getRequestedFor;
 import static com.github.tomakehurst.wiremock.client.WireMock.okJson;
 import static com.github.tomakehurst.wiremock.client.WireMock.urlPathEqualTo;
 import static com.github.tomakehurst.wiremock.core.WireMockConfiguration.wireMockConfig;
+import static com.github.tomakehurst.wiremock.stubbing.Scenario.STARTED;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
@@ -45,9 +47,11 @@ class FileProcessingControllerIT {
 
     @DynamicPropertySource
     static void properties(DynamicPropertyRegistry registry) {
+        registry.add("ip-api.base-url", wireMock::baseUrl);
+        registry.add("resilience4j.retry.instances.ipApi.wait-duration", () -> "10ms");
         registry.add(
-                "ip-api.base-url",
-                wireMock::baseUrl
+                "resilience4j.retry.instances.ipApi.enable-exponential-backoff",
+                () -> "false"
         );
     }
 
@@ -175,6 +179,64 @@ class FileProcessingControllerIT {
                 .andExpect(jsonPath("$.error").value("Blocked provider: Azure"));
 
         assertBlockedAudit("GB", "Azure");
+    }
+
+    @Test
+    void shouldRetryTransientFailuresThenAllow() throws Exception {
+
+        String ip = "203.0.113.40";
+        String path = "/json/" + ip;
+
+        wireMock.stubFor(
+                get(urlPathEqualTo(path))
+                        .inScenario("ip-api-retry-success")
+                        .whenScenarioStateIs(STARTED)
+                        .willReturn(aResponse().withStatus(503))
+                        .willSetStateTo("second")
+        );
+        wireMock.stubFor(
+                get(urlPathEqualTo(path))
+                        .inScenario("ip-api-retry-success")
+                        .whenScenarioStateIs("second")
+                        .willReturn(aResponse().withStatus(503))
+                        .willSetStateTo("third")
+        );
+        wireMock.stubFor(
+                get(urlPathEqualTo(path))
+                        .inScenario("ip-api-retry-success")
+                        .whenScenarioStateIs("third")
+                        .willReturn(okJson("""
+                                {
+                                  "status": "success",
+                                  "countryCode": "GB",
+                                  "isp": "Example Residential ISP",
+                                  "org": "Example Residential ISP",
+                                  "asname": "EXAMPLE"
+                                }
+                                """))
+        );
+
+        sendFile(ip).andExpect(status().isOk());
+
+        wireMock.verify(3, getRequestedFor(urlPathEqualTo(path)));
+    }
+
+    @Test
+    void shouldReturnUnavailableAfterRetryExhaustion() throws Exception {
+
+        String ip = "203.0.113.41";
+        String path = "/json/" + ip;
+
+        wireMock.stubFor(
+                get(urlPathEqualTo(path))
+                        .willReturn(aResponse().withStatus(503))
+        );
+
+        sendFile(ip)
+                .andExpect(status().isServiceUnavailable())
+                .andExpect(jsonPath("$.error").value("IP validation service unavailable"));
+
+        wireMock.verify(3, getRequestedFor(urlPathEqualTo(path)));
     }
 
     private void assertBlockedAudit(String countryCode, String provider) {

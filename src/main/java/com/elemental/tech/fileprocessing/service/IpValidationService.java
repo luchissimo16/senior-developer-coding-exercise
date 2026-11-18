@@ -2,6 +2,7 @@ package com.elemental.tech.fileprocessing.service;
 
 import com.elemental.tech.fileprocessing.api.dto.IpApiResponse;
 import com.elemental.tech.fileprocessing.config.IpValidationProperties;
+import io.github.resilience4j.retry.annotation.Retry;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 import org.springframework.web.client.RestClient;
@@ -46,6 +47,7 @@ public class IpValidationService {
         this.blockedProviders = Map.copyOf(providers);
     }
 
+    @Retry(name = "ipApi")
     public IpApiResponse lookup(String ip) {
 
         IpApiResponse body = restClient.get()
